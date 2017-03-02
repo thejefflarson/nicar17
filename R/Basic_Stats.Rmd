@@ -1,0 +1,303 @@
+---
+title: "Basic statistics in R"
+output: html_notebook
+---
+##### NICAR 2017
+##### Olga Pierce
+h/t to [Ryan Menezes](http://www.latimes.com/la-bio-ryan-menezes-staff.html)  
+(And an unplanned big thank you to Jeff Larson)
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(datasets)
+library(nlme)
+library(tidyr)
+library(tibble)
+```
+
+  
+  
+R offers a variety of statistical techniques that can help us find insights from data. But how do we know which ones to use?  
+
+The answer to that question nearly always depends on the characteristics of your underlying data. A good place to start when looking at a variable of interest is to study the distribution. 
+
+In practical terms, this means finding the maximum and minimum values, and figuring out how the rest of the values are situated in between.  
+
+R can help us do this by creating a visualization called a histogram. We'll do this using the ggplot2 package on the dataset 'bdf' from the package 'nlme'. 
+
+Let's take a moment to familiarize ourselves with the data by calling the documentation.
+
+```{r}
+?bdf
+```
+
+So looks like we have characteristics of students, their classes and their schools, and an outcome, which is the students' test scores.
+
+Let's start by looking at the distribution of the IQ.verb field
+```{r}
+scores <- bdf
+a <- ggplot(scores,aes(IQ.verb)) 
+a + geom_histogram(binwidth=1,color="black",fill="light blue") +
+scale_x_continuous(breaks=seq(0,40,1)) 
+```
+
+The numbers along the bottom on the x-axis represent the IQ.verb values that appear in the data. The vertical y-axis shows the number of students who had each verbal IQ score.  
+
+This looks very much like the renowned normal distribution you may have heard of. The characteristics of this distribution are a clustering toward the middle value that tapers off in a fairly symmetrical and predictable way toward the two ends.
+
+Let's look more closely at this distribution.
+
+```{r echo=FALSE}
+library(MASS)
+ggplot(scores, aes(x = IQ.verb)) + 
+  geom_histogram(aes(y=..density..),colour = "black", fill = "light blue", binwidth = 1)+
+  stat_function(fun=dnorm,args=fitdistr(scores$IQ.verb,"normal")$estimate) + geom_vline(xintercept = mean(scores$IQ.verb), color="violetred3")+ annotate("text", x = 13.1, y = .25, label = "<- average") + theme(axis.text.y=element_blank(),axis.title.y=element_blank()) + scale_x_continuous(breaks=seq(0,40,1))
+detach(package:MASS) #MASS interferes with some dplyr functions blah
+library(dplyr)
+```
+
+A way to describe the middle of this hump is the mean, also known as the average. If you have a distribution that is pretty close to normal, the mean is a good way to characterize information for readers.
+
+Let's calculate the mean of our verbal IQ scores using the dplyr command 'summarize' which calculates a single value for a column of data.
+
+```{r}
+scores %>% summarize(mean_IQ = mean(IQ.verb))
+```
+
+This histogram also gives us some other very useful pieces of information. The first is called the standard deviation, which measures how wide the data is spread around the mean. In this example, if most students have an IQ close to the average the standard deviation will be small. If the left and right tails of the histogram are far from the mean, the standard deviation will be bigger. 
+
+Let's calculate the standard deviation of the IQ scores above.
+```{r}
+scores %>% summarize(stdev_IQ = sd(IQ.verb))
+```
+
+The units of the standard deviation are also the same as the data you are summarizing. So the standard deviation is 2 IQ points.
+
+We can add the standard deviation to our histogram.
+
+```{r echo=FALSE}
+library(MASS)
+m <- mean(scores$IQ.verb)
+s <- sd(scores$IQ.verb)
+ggplot(scores, aes(x = IQ.verb)) + 
+  geom_histogram(aes(y=..density..),colour = "black", fill = "light blue", binwidth = 1) +   
+  stat_function(fun=dnorm,args=fitdistr(scores$IQ.verb,"normal")$estimate) + 
+  geom_vline(xintercept = c(m-2*s,m-s,m,m+s,m+2*s), color="violetred3")+ 
+  annotate("text", x = c((m-2*s)-1,(m-s)-1,m+.7,(m+s)+1,(m+2*s)+1), y = .25, label = c("-2 stdev","-1 stdev","mean","+1 stdev","+2 stdev")) + 
+  theme(axis.text.y=element_blank(),axis.title.y=element_blank()) + 
+scale_x_continuous(breaks=seq(0,40,1))
+detach(package:MASS) #MASS interferes with some dplyr functions blah
+library(dplyr)
+```
+
+Why is this useful?
+
+The first is that a very large standard deviation relative to the mean indicates that the mean is not really very descriptive of your data, because lots of people in it are far from the mean.
+
+The second is that, in a normal or normal-ish distribution, observations will fall into the plus and minus standard deviation bands above in predictable ways. In particular, about 95% of observations will fall between -2 standard deviations and +2 standard deviations. The +/- 2 standard deviation boundary has a lot of significance in statistics. A value that is outside those lines is considered an outlier, an unusual value of note.
+
+Describing data using an average has a couple advantages. The first is that most readers have a common-sense understanding of what the word average means. The second is that the units of average are the same as whatever it is you are average. In this case it's IQ points, so you can say 'the average child has an IQ of 12'.  
+
+But there are other cases where the average just isn't a very meaningful way to characterize a distribution.
+
+Let's see what happens when we add just a few extreme outliers to our schools data:
+
+Randomly sample 100 rows from our data:
+```{r}
+data_sample <- scores %>% sample_n(100)
+```
+
+
+```{r}
+y <- data_sample %>% select(IQ.verb)
+x <- data_frame(IQ.verb=c(200,200,200,200,200,200))
+new_IQs <- bind_rows(x,y)
+```
+
+Make a histogram of our new and improved data:
+```{r}
+a <- ggplot(new_IQs,aes(IQ.verb)) 
+a + geom_histogram(binwidth=1,color="black",fill="light blue") 
+```
+
+What is the new average?
+```{r}
+new_IQs %>% summarize(mean_IQ = mean(IQ.verb))
+```
+
+If we plot it, it looks like this:
+```{r echo=FALSE}
+library(MASS)
+ggplot(new_IQs, aes(x = IQ.verb)) + 
+  geom_histogram(aes(y=..density..),colour = "black", fill = "light blue", binwidth = 1)+
+  stat_function(fun=dnorm,args=fitdistr(scores$IQ.verb,"normal")$estimate) + geom_vline(xintercept = mean(new_IQs$IQ.verb), color="violetred3")+ annotate("text", x = 35.5, y = .25, label = "<- average") + theme(axis.text.y=element_blank(),axis.title.y=element_blank())
+detach(package:MASS) #MASS interferes with some dplyr functions blah
+library(dplyr)
+
+```
+
+The average is now a number that never actually appears in the data. It's too high to describe the distribution on the far left-hand side, but much too low to reflect the far right group.
+
+One way of addressing this issue is to find the median. This is calculated by putting the values in your data in order smallest to largest, and then identifying the middle one.
+
+Let's take the median of our new data:
+
+```{r}
+new_IQs %>% summarize(med=median(IQ.verb))
+```
+
+Is the mean or the median a more accurate reflection of the children's IQs?
+
+Now let's make a histogram of the percent minority variable:
+```{r}
+a <- ggplot(scores,aes(percmino)) 
+a + geom_histogram(binwidth=1,color="black",fill="light blue") 
+```
+
+Another good use for histograms is binning. Looking at the histogram above, what might be useful breaks for putting schools into bins by percent minority?
+
+Let's use 10% as our break.
+```{r}
+scores <- scores %>% mutate(diverse=ifelse(percmino>=10,1,0))
+```
+
+Let's see what we got.
+```{r}
+table(scores$diverse)
+```
+
+Now let's find the average language score for students in each type of school.
+
+```{r}
+group_means <- scores %>% group_by(diverse) %>% summarize(means=mean(langPOST))
+group_means
+```
+
+Visually:
+```{r}
+ggplot(scores, aes(x=langPOST, fill=as.factor(diverse))) +
+  geom_histogram(binwidth=5, alpha=.5, position="identity")+
+geom_vline(data=group_means, aes(xintercept=means, color=as.factor(diverse)),
+linetype=1, size=.75)
+```
+
+Clearly the means and distributions of these two groups of students differ. But having identical means would also be unexpected. So if we have two different means, how much difference is enough?
+
+To ask that question we can conduct something called a t-test. Are the means of the two groups different enough that we can say the difference is not due to chance?
+
+```{r}
+t.test(langPOST ~ diverse, data=scores)
+```
+
+This output is slightly confusing, but there are two useful pieces of information here. 
+
+The first is the p-value, which tells us whether our result is statistically significant. For the 95% confidence level, you want a p-value less than .05. Our p-value here is virtually zero, so we definitely pass that test. 
+
+The other useful piece of information is the confidence interval. It indicates that if we had data for all Dutch schoolchildren, not just those in the sample, the difference in mean test score between the two groups is most likely between 3.16 and 5.00. It's useful to look at both pieces of information because a statistically significant but very small difference might not be newsworthy.
+
+Let's repeat the exercise for class size, using a break at 30.
+
+```{r}
+scores <- scores %>% mutate(big_class=ifelse(classsiz>=30,1,0))
+class_group_means <- scores %>% group_by(big_class) %>% summarize(means=mean(langPOST))
+class_group_means
+```
+
+This is a surprising result! It appears that students in bigger classes actually score better on the test. But is the difference statistically significant?
+
+```{r}
+t.test(langPOST ~ big_class, data=scores)
+```
+
+The p-value is greater than .05. What does this tell us about our result?
+
+This can also be generalized to more than two groups. This type of analysis is called ANOVA.
+
+Here's a breakdown of the 'denomina' variable from our table:
+1=Public school
+2=Protestant private school
+3=Catholic private school
+4=non-denominational private school
+
+Let's find the mean test score of students in each type of school.
+
+```{r}
+scores %>% group_by(denomina) %>% summarize(means=mean(langPOST))
+```
+
+So the means are different, but are the differences statistically significant? This question is more complex than it seems: we need to compare each combination of schools types to be conclusive.
+
+That's where ANOVA comes in.
+
+```{r}
+aov.denom <- aov(langPOST ~ factor(denomina), data=scores)
+summary(aov.denom)
+```
+
+Here we are conducting an F-test, instead of a t-test. The key value here is the Pr(>F) value, which we can see is very small. R also helps you out by giving you a key for significance level. Because we have three asterisks, that means our result is significant at the 99.9% confidence level.
+
+But what this tells us is just that one of the means is different than the others. It doesn't tell us how many or which ones. For that we need to do an additional _post hoc_ test.
+
+
+```{r}
+pairwise.t.test(scores$langPOST, scores$denomina, p.adj="holm")
+```
+
+The matrix above gives a p-value for each possible pair of school types.
+
+What this shows us is that each of the means are significantly different from each other. Reminder: because we are talking 95% confidence, we want each of the p-values reported in the table to be less than .05.
+
+#### Using mean and standard deviation for better ranking
+It's easy enough to sort columns in R. But rankings mean more if you take into account the center of the data.  
+
+Z-scores¶
+
+When could I use this? Creating Z-values gives us a way to convert raw numbers into a "standard score" that tells us how far above or below the mean a value is.
+For this example, let's take a look at the ratings of U.S. judges from a 1977 New Haven Register report:
+
+```{r}
+?USJudgeRatings
+head(USJudgeRatings)
+```
+
+The judges were ranked on a scale of 1-10 across a variety of factors: Number of contacts of lawyer with judge, judicial integrity, demeanor, diligence, case flow managing, prompt decisions, preparation for trial, familiarity with law, sound oral rulings, sound written rulings, physical ability, worthy of retention.  
+
+A question we can answer: Which judge had the overall best performance across all categories?
+This could be accomplished by summing each row across categories. But a quick printout of the means of each row shows us why that may not be a good idea:
+
+```{r}
+means <- USJudgeRatings %>% summarize_all(funs(means=mean))
+gather(means,"category","mean_score")
+```
+
+A good score is much easier to come by in some categories than others.
+
+These are subtle differences, but important. Integrity, on average, was very high among judges (mean=8.02). Getting a 9 in integrity meant a lot less than a 9 in demeanor (mean=7.51) because integrity ratings skewed high.  
+
+Z-scores take into account the center and the spread of the data. The result is a number that reflects how many standard deviations from the mean each individual observation was.
+
+R will handle all of the math with the scale function.
+
+```{r}
+judges.scaled <- scale(USJudgeRatings)
+head(judges.scaled)
+```
+
+Summing the z-scores for a given judge will tell us how many standard deviations above or below the mean he or she was in the aggregate:
+
+```{r}
+head(data.frame(sort(rowSums(judges.scaled), decreasing = TRUE)))
+```
+
+
+
+
+
+
+
+
+
+
+
+
